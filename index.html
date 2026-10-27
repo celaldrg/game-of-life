@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Game of Life</title>
+  <meta name="description" content="Conway's Game of Life in the browser: draw cells, zoom and pan, switch between B/S rules and drop in classic patterns such as the Gosper glider gun.">
+  <meta name="theme-color" content="#0f172a">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Game of Life">
+  <meta property="og:description" content="Conway's Game of Life in the browser: draw cells, zoom and pan, switch between B/S rules and drop in classic patterns such as the Gosper glider gun.">
+  <meta property="og:url" content="https://celaldrg.github.io/game-of-life/">
+  <meta property="og:image" content="https://celaldrg.github.io/game-of-life/docs/screenshot.png">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f172a'/%3E%3Cg fill='%2384cc16'%3E%3Crect x='13' y='6' width='6' height='6' rx='1.5'/%3E%3Crect x='20' y='13' width='6' height='6' rx='1.5'/%3E%3Crect x='6' y='20' width='6' height='6' rx='1.5'/%3E%3Crect x='13' y='20' width='6' height='6' rx='1.5'/%3E%3Crect x='20' y='20' width='6' height='6' rx='1.5'/%3E%3C/g%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="src/main.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <h1 class="brand">
+      <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <rect x="9.5" y="3" width="5" height="5" rx="1.2"/>
+        <rect x="16" y="9.5" width="5" height="5" rx="1.2"/>
+        <rect x="3" y="16" width="5" height="5" rx="1.2"/>
+        <rect x="9.5" y="16" width="5" height="5" rx="1.2"/>
+        <rect x="16" y="16" width="5" height="5" rx="1.2"/>
+      </svg>
+      <span data-i18n="title">Game of Life</span>
+    </h1>
+    <div class="topbar-actions">
+      <button id="clear" class="btn btn-ghost" type="button">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+        </svg>
+        <span data-i18n="clear">Clear</span>
+      </button>
+      <button id="language" class="btn btn-lang" type="button" data-i18n-label="switchLanguage" aria-label="TR: switch to Turkish">TR</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="stage">
+      <div class="board-wrap">
+        <canvas id="board" class="board" role="application" tabindex="0" data-i18n-label="board" aria-label="Life grid. Click or drag to draw cells."></canvas>
+      </div>
+      <div class="stage-bar">
+        <dl class="stats">
+          <div class="stat">
+            <dt data-i18n="generation">Generation</dt>
+            <dd id="generation">0</dd>
+          </div>
+          <div class="stat">
+            <dt data-i18n="population">Population</dt>
+            <dd id="population">0</dd>
+          </div>
+        </dl>
+        <div class="tools" role="toolbar" data-i18n-label="viewTools" aria-label="View controls">
+          <button id="pan" class="tool" type="button" aria-pressed="false" data-i18n-tooltip="panMode" aria-label="Pan mode" title="Pan mode">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M12 3v18M3 12h18M12 3 9.5 5.5M12 3l2.5 2.5M12 21l-2.5-2.5M12 21l2.5-2.5M3 12l2.5-2.5M3 12l2.5 2.5M21 12l-2.5-2.5M21 12l-2.5 2.5"/>
+            </svg>
+          </button>
+          <button id="zoom-out" class="tool" type="button" data-i18n-tooltip="zoomOut" aria-label="Zoom out" title="Zoom out">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h14"/></svg>
+          </button>
+          <button id="zoom-in" class="tool" type="button" data-i18n-tooltip="zoomIn" aria-label="Zoom in" title="Zoom in">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+          <button id="fit" class="tool" type="button" data-i18n-tooltip="fit" aria-label="Fit the grid to the view" title="Fit the grid to the view">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <aside class="panel" data-i18n-label="controls" aria-label="Simulation controls">
+      <div class="actions">
+        <button id="play" class="btn btn-primary" type="button">
+          <svg id="play-icon" class="icon icon-solid" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 4.5v15l12.5-7.5z"/></svg>
+          <svg id="pause-icon" class="icon icon-solid" viewBox="0 0 24 24" aria-hidden="true" focusable="false" hidden><rect x="6" y="4.5" width="4.5" height="15" rx="1.2"/><rect x="13.5" y="4.5" width="4.5" height="15" rx="1.2"/></svg>
+          <span id="play-label">Play</span>
+        </button>
+        <button id="step" class="btn" type="button">
+          <svg class="icon icon-solid" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 4.5v15l11-7.5z"/><rect x="16.5" y="4.5" width="3" height="15" rx="1"/></svg>
+          <span data-i18n="step">Step</span>
+        </button>
+        <button id="random" class="btn" type="button">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <rect x="3.5" y="3.5" width="17" height="17" rx="4"/>
+            <circle class="dot" cx="8.5" cy="8.5" r="1.5"/><circle class="dot" cx="15.5" cy="8.5" r="1.5"/>
+            <circle class="dot" cx="12" cy="12" r="1.5"/>
+            <circle class="dot" cx="8.5" cy="15.5" r="1.5"/><circle class="dot" cx="15.5" cy="15.5" r="1.5"/>
+          </svg>
+          <span data-i18n="random">Random</span>
+        </button>
+      </div>
+
+      <div class="speed">
+        <label class="field-label" for="speed" data-i18n="speed">Speed</label>
+        <input id="speed" class="range" type="range" min="1" max="60" step="1" value="10">
+        <output id="speed-value" class="field-value" for="speed">10 gen/s</output>
+      </div>
+
+      <div class="field">
+        <label class="field-label" for="rule" data-i18n="rule">Rule</label>
+        <div class="field-row">
+          <input id="rule" class="input input-rule" type="text" value="B3/S23" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-describedby="rule-help">
+          <select id="preset" class="select" data-i18n-label="rulePresets" aria-label="Rule presets"></select>
+        </div>
+        <p id="rule-help" class="help-text" aria-live="polite">B: birth, S: survival (neighbour counts)</p>
+      </div>
+
+      <label class="switch">
+        <input id="wrap" class="switch-input" type="checkbox" checked>
+        <span class="switch-track" aria-hidden="true"></span>
+        <span class="switch-text">
+          <span class="switch-title" data-i18n="wrap">Wrap edges</span>
+          <span class="help-text" data-i18n="wrapHelp">Opposite edges are joined (torus)</span>
+        </span>
+      </label>
+
+      <div class="field">
+        <label class="field-label" for="pattern" data-i18n="pattern">Pattern</label>
+        <div class="field-row">
+          <select id="pattern" class="select" aria-describedby="pattern-help"></select>
+          <button id="place" class="btn" type="button" data-i18n="place">Place</button>
+        </div>
+        <p id="pattern-help" class="help-text" data-i18n="placeHelp">Places the pattern at the centre of the view</p>
+      </div>
+
+      <section class="help" aria-labelledby="help-title">
+        <h2 id="help-title" class="help-title" data-i18n="helpTitle">Controls</h2>
+        <dl class="keys">
+          <div><dt><kbd data-i18n="keySpace">Space</kbd></dt><dd data-i18n="helpPlay">Play / pause</dd></div>
+          <div><dt><kbd>N</kbd></dt><dd data-i18n="step">Step</dd></div>
+          <div><dt><kbd>R</kbd></dt><dd data-i18n="random">Random</dd></div>
+          <div><dt><kbd>C</kbd></dt><dd data-i18n="clear">Clear</dd></div>
+          <div><dt><kbd>+</kbd> <kbd>&minus;</kbd></dt><dd data-i18n="helpZoom">Zoom in / out</dd></div>
+          <div><dt><kbd>F</kbd></dt><dd data-i18n="helpFit">Fit to view</dd></div>
+          <div><dt><kbd>&larr;</kbd> <kbd>&uarr;</kbd> <kbd>&rarr;</kbd> <kbd>&darr;</kbd></dt><dd data-i18n="helpArrows">Move the view (grid focused)</dd></div>
+        </dl>
+        <ul class="gestures">
+          <li data-i18n="helpDraw">Click or drag: draw or erase</li>
+          <li data-i18n="helpWheel">Wheel or pinch: zoom</li>
+          <li data-i18n="helpPan">Pan mode, middle button or two fingers: move</li>
+        </ul>
+      </section>
+    </aside>
+  </main>
+
+  <footer class="footer">
+    <span>MIT</span> · <a href="https://github.com/celaldrg/game-of-life" data-i18n="source">Source on GitHub</a>
+  </footer>
+</body>
+</html>

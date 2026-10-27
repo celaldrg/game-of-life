@@ -1,0 +1,11 @@
+{
+  "name": "game-of-life",
+  "version": "1.0.0",
+  "description": "Conway's Game of Life in the browser: fast typed-array engine, B/S rules, RLE patterns, zoom, pan and touch drawing.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  },
+  "license": "MIT"
+}
