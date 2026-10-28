@@ -38,9 +38,8 @@ describe('parseRule', () => {
 });
 
 describe('rule presets', () => {
-  it('have unique ids and names, and Life is the default', () => {
+  it('have unique ids, and Life is the default', () => {
     assert.equal(new Set(RULE_PRESETS.map((preset) => preset.id)).size, RULE_PRESETS.length);
-    assert.ok(RULE_PRESETS.every((preset) => preset.name.length > 0));
     assert.equal(RULE_PRESETS[0].rule, DEFAULT_RULE);
   });
 });

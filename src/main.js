@@ -39,91 +39,98 @@ function warmUpTrail(game, trail) {
   game.play();
 }
 
-function start() {
-  const canvas = document.getElementById('board');
-  const demo = new URLSearchParams(window.location.search).has('demo');
+/** The whole grid: the Fit button's view. */
+const overview = (area) => fitView(area, FIT_MARGIN);
+
+/** Builds the shared state of the page: game, renderer, trail, camera and redraw flag. */
+function createApp(canvas, demo) {
   const game = demo ? createDemoGame() : createRandomGame();
   const renderer = createRenderer(canvas);
   const { width: cols, height: rows } = game.getState();
   const trail = createTrail(cols * rows);
   if (demo) warmUpTrail(game, trail);
-  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-  const coarsePointer = window.matchMedia('(pointer: coarse)');
-  // follow: computes the view from the canvas bounds while the player has not zoomed or panned.
-  const camera = { view: { scale: 1, x: 0, y: 0 }, follow: null, panMode: false };
+  const app = {
+    canvas,
+    game,
+    renderer,
+    trail,
+    // follow: computes the view from the canvas bounds while the player has not zoomed or panned.
+    camera: { view: { scale: 1, x: 0, y: 0 }, follow: null, panMode: false },
+    highlight: null,
+    dirty: true,
+    panel: null,
+    bounds: () => ({ cols, rows, width: renderer.size.width, height: renderer.size.height }),
+    setView(view) {
+      app.camera.view = view;
+      app.camera.follow = null;
+      app.dirty = true;
+    },
+    /** Shows a view computed from the canvas size and recomputes it on resize until the player zooms or pans. */
+    follow(viewFor) {
+      app.camera.follow = viewFor;
+      app.camera.view = viewFor(app.bounds());
+      app.dirty = true;
+    },
+    /** Ages the trail by one generation. Runs for every generation, also when a frame advances several. */
+    trace(cells) {
+      advanceTrail(trail, cells);
+      app.dirty = true;
+    },
+    wipe() {
+      trail.fill(0);
+      app.highlight = null;
+      app.dirty = true;
+    },
+  };
+  return app;
+}
+
+/** Returns the language toggle; it updates the panel once one is attached to the app. */
+function bindLanguage(app) {
   let language = normalizeLanguage(loadSetting(LANGUAGE_KEY, DEFAULT_LANGUAGE));
-  let stroke = null;
-  let highlight = null;
-  let dirty = true;
-  let lastFrame = null;
+  return {
+    apply: () => app.panel.setLanguage(language),
+    toggle() {
+      language = otherLanguage(language);
+      saveSetting(LANGUAGE_KEY, language);
+      app.panel.setLanguage(language);
+    },
+  };
+}
 
-  const bounds = () => ({ cols, rows, width: renderer.size.width, height: renderer.size.height });
-  /** The whole grid: the Fit button's view. */
-  const overview = (area) => fitView(area, FIT_MARGIN);
-  /** The first view of a normal visit, zoomed in on touch screens and narrow canvases. */
-  const firstView = (area) => startView(area, FIT_MARGIN, coarsePointer.matches);
+function zoomAtCentre(app, factor) {
+  const { width, height } = app.renderer.size;
+  app.setView(zoomView(app.camera.view, factor, width / 2, height / 2, app.bounds()));
+}
 
-  function setView(view) {
-    camera.view = view;
-    camera.follow = null;
-    dirty = true;
-  }
+function placePattern(app, id) {
+  const pattern = getPattern(id);
+  const centre = centreCell(app.camera.view, app.bounds());
+  const { left, top } = app.game.placePattern(pattern, centre.x, centre.y);
+  app.highlight = { left, top, width: pattern.width, height: pattern.height, start: performance.now() };
+  app.dirty = true;
+}
 
-  /** Shows a view computed from the canvas size and recomputes it on resize until the player zooms or pans. */
-  function follow(viewFor) {
-    camera.follow = viewFor;
-    camera.view = viewFor(bounds());
-    dirty = true;
-  }
-
-  function zoomAtCentre(factor) {
-    const { width, height } = renderer.size;
-    setView(zoomView(camera.view, factor, width / 2, height / 2, bounds()));
-  }
-
-  /** Ages the trail by one generation. Runs for every generation, also when a frame advances several. */
-  function trace(cells) {
-    advanceTrail(trail, cells);
-    dirty = true;
-  }
-
-  function wipe() {
-    trail.fill(0);
-    highlight = null;
-    dirty = true;
-  }
-
-  function place(id) {
-    const pattern = getPattern(id);
-    const centre = centreCell(camera.view, bounds());
-    const { left, top } = game.placePattern(pattern, centre.x, centre.y);
-    highlight = { left, top, width: pattern.width, height: pattern.height, start: performance.now() };
-    dirty = true;
-  }
-
-  function toggleLanguage() {
-    language = otherLanguage(language);
-    saveSetting(LANGUAGE_KEY, language);
-    panel.setLanguage(language);
-  }
-
-  const actions = {
+/** The commands shared by the panel buttons and the keyboard. */
+function createActions(app, toggleLanguage) {
+  const { game, camera, canvas } = app;
+  return {
     toggle: () => game.toggleRunning(),
     step() {
       game.step();
-      trace(game.getState().cells);
+      app.trace(game.getState().cells);
     },
     random() {
       game.randomize();
-      wipe();
+      app.wipe();
     },
     clear() {
       game.clear();
-      wipe();
+      app.wipe();
     },
-    zoomIn: () => zoomAtCentre(ZOOM_STEP),
-    zoomOut: () => zoomAtCentre(1 / ZOOM_STEP),
-    fit: () => follow(overview),
+    zoomIn: () => zoomAtCentre(app, ZOOM_STEP),
+    zoomOut: () => zoomAtCentre(app, 1 / ZOOM_STEP),
+    fit: () => app.follow(overview),
     togglePan() {
       camera.panMode = !camera.panMode;
       canvas.classList.toggle('is-panning', camera.panMode);
@@ -133,17 +140,21 @@ function start() {
     setRule: (text) => game.setRule(text),
     setWrap(on) {
       game.setWrap(on);
-      dirty = true;
+      app.dirty = true;
     },
-    place,
+    place: (id) => placePattern(app, id),
   };
+}
 
-  function paint(x, y) {
+/** Connects drawing, panning and zooming on the canvas. */
+function bindPointer(app) {
+  const { game, camera } = app;
+  let stroke = null;
+  const paint = (x, y) => {
     const cell = screenToCell(camera.view, x, y);
-    if (stroke.to(cell.x, cell.y) > 0) dirty = true;
-  }
-
-  bindCanvas(canvas, {
+    if (stroke.to(cell.x, cell.y) > 0) app.dirty = true;
+  };
+  bindCanvas(app.canvas, {
     isPanMode: () => camera.panMode,
     strokeStart(x, y) {
       const cell = screenToCell(camera.view, x, y);
@@ -159,57 +170,79 @@ function start() {
     strokeCancel() {
       stroke?.revert();
       stroke = null;
-      dirty = true;
+      app.dirty = true;
     },
-    pan: (dx, dy) => setView(panView(camera.view, dx, dy, bounds())),
-    zoom: (factor, x, y) => setView(zoomView(camera.view, factor, x, y, bounds())),
+    pan: (dx, dy) => app.setView(panView(camera.view, dx, dy, app.bounds())),
+    zoom: (factor, x, y) => app.setView(zoomView(camera.view, factor, x, y, app.bounds())),
   });
+}
 
-  bindKeyboard(document, canvas, {
+function bindKeys(app, actions) {
+  bindKeyboard(document, app.canvas, {
     perform: (action) => actions[action](),
-    pan: (dx, dy) => setView(panView(camera.view, dx * PAN_STEP, dy * PAN_STEP, bounds())),
+    pan: (dx, dy) => app.setView(panView(app.camera.view, dx * PAN_STEP, dy * PAN_STEP, app.bounds())),
   });
+}
 
-  const panel = createPanel(document, actions);
-  panel.setLanguage(language);
-
-  function currentHighlight(now) {
-    if (!highlight) return null;
-    const progress = (now - highlight.start) / HIGHLIGHT_MS;
-    if (progress >= 1) {
-      highlight = null;
-      return null;
-    }
-    const alpha = reducedMotion.matches ? 0.9 : 1 - progress;
-    return { ...highlight, alpha };
+/** The fading outline of the last placed pattern, or null once it has faded. */
+function currentHighlight(app, now, reducedMotion) {
+  if (!app.highlight) return null;
+  const progress = (now - app.highlight.start) / HIGHLIGHT_MS;
+  if (progress >= 1) {
+    app.highlight = null;
+    return null;
   }
+  const alpha = reducedMotion ? 0.9 : 1 - progress;
+  return { ...app.highlight, alpha };
+}
+
+/** Starts the canvas resize handling and the animation loop. */
+function runLoop(app) {
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const { game, renderer, camera } = app;
+  let lastFrame = null;
 
   function draw(now) {
-    renderer.draw({ state: game.getState(), view: camera.view, trail, highlight: currentHighlight(now) });
-    dirty = highlight !== null;
+    const highlight = currentHighlight(app, now, reducedMotion.matches);
+    renderer.draw({ state: game.getState(), view: camera.view, trail: app.trail, highlight });
+    app.dirty = app.highlight !== null;
   }
 
   function resize() {
     const previous = { ...renderer.size };
     if (!renderer.resize()) return;
-    camera.view = camera.follow ? camera.follow(bounds()) : resizeView(camera.view, previous, bounds());
+    camera.view = camera.follow ? camera.follow(app.bounds()) : resizeView(camera.view, previous, app.bounds());
     draw(performance.now());
   }
 
   function frame(now) {
-    game.update(lastFrame === null ? 0 : now - lastFrame, trace);
+    game.update(lastFrame === null ? 0 : now - lastFrame, app.trace);
     lastFrame = now;
     if (renderer.size.ratio !== (window.devicePixelRatio || 1)) resize();
-    if (dirty) draw(now);
-    panel.render(game.getState(), camera.panMode);
+    if (app.dirty) draw(now);
+    app.panel.render(game.getState(), camera.panMode);
     window.requestAnimationFrame(frame);
   }
 
-  new ResizeObserver(resize).observe(canvas);
+  new ResizeObserver(resize).observe(app.canvas);
   resize();
-  // The demo scene is meant to be seen whole.
-  follow(demo ? overview : firstView);
-  window.requestAnimationFrame(frame);
+  return () => window.requestAnimationFrame(frame);
+}
+
+function start() {
+  const demo = new URLSearchParams(window.location.search).has('demo');
+  const app = createApp(document.getElementById('board'), demo);
+  const language = bindLanguage(app);
+  const actions = createActions(app, language.toggle);
+  bindPointer(app);
+  bindKeys(app, actions);
+  app.panel = createPanel(document, actions);
+  language.apply();
+  const startFrames = runLoop(app);
+  // The demo scene is meant to be seen whole; a normal visit zooms in on touch screens and narrow canvases.
+  const coarsePointer = window.matchMedia('(pointer: coarse)');
+  app.follow(demo ? overview : (area) => startView(area, FIT_MARGIN, coarsePointer.matches));
+  startFrames();
 }
 
 start();

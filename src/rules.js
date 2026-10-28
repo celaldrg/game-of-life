@@ -14,10 +14,10 @@ export const DEFAULT_RULE = 'B3/S23';
 
 /** Well-known rules offered as presets, in menu order. */
 export const RULE_PRESETS = Object.freeze([
-  Object.freeze({ id: 'life', name: "Conway's Life", rule: 'B3/S23' }),
-  Object.freeze({ id: 'highlife', name: 'HighLife', rule: 'B36/S23' }),
-  Object.freeze({ id: 'seeds', name: 'Seeds', rule: 'B2/S' }),
-  Object.freeze({ id: 'day-night', name: 'Day & Night', rule: 'B3678/S34678' }),
+  Object.freeze({ id: 'life', rule: 'B3/S23' }),
+  Object.freeze({ id: 'highlife', rule: 'B36/S23' }),
+  Object.freeze({ id: 'seeds', rule: 'B2/S' }),
+  Object.freeze({ id: 'day-night', rule: 'B3678/S34678' }),
 ]);
 
 const RULE_PART = /^([BS])([0-8]*)$/i;
